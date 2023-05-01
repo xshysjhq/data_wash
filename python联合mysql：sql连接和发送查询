@@ -1,0 +1,121 @@
+import pymysql
+import pandas as pd
+import tkinter as tk
+from tkinter import messagebox
+from tkinter import ttk
+from ttkbootstrap.constants import *
+def python_connect_mysql(sql_input):
+    db = pymysql.Connect(host='127.0.0.1', port=3306, user='root',  # 连接数据库MySQL
+                         passwd='123456', database='资金分析模型数据库', charset='utf8')  #这就是pymysql.Connect函数，里面的参数大家
+    cursor = db.cursor()
+    sql = sql_input
+    cursor.execute(sql)  # 执行SQL语句相当于“；
+    # 获取表格的字段信息
+    fields = cursor.description
+    result = cursor.fetchall()
+    cursor.close()  # 关闭光标
+    db.close()  # 关闭数据库
+
+
+    #开始写入数据
+
+    for field in range(len(fields)):
+        df = pd.DataFrame(result, columns=[field[0] for field in fields])
+    df.to_excel(r'C:\Users\admin\Desktop\查询结果.xlsx', index=False, startrow=0)
+    # 弹出提示框
+    messagebox.showinfo("数据库查询", r"查询结果已经保存在C:\Users\admin\Desktop\查询结果.xlsx")
+
+
+business_data=['开户银行','交易卡号','交易账号','交易方户名','交易方证件号码','交易时间',
+               '交易金额','交易余额','收付标志','交易对手账卡号','现金标志','对手户名','对手身份证号',
+               '对手开户银行','交易余额','摘要说明','交易币种','交易网点名称','交易发生地','交易是否成功',
+               '传票号','IP地址','MAC地址','对手交易余额','交易流水号','日志号','凭证种类','凭证号','交易柜员号','备注'
+]
+people_data=['客户名称','证照类型','证照号码','单位地址','单位电话','工作单位','邮箱地址','代办人姓名','代办人证件类型',
+              '代办人证件号码','国税纳税号','地税纳税号','法人代表','客户工商执照号码'
+]
+account_data=['账户开户名称','开户人证件号码','交易卡号','交易账号','账号开户时间','账户余额','可用余额','币种','开户网点代码',
+              '开户网点','账户状态','钞汇标志名称','销户日期','账户类型','备注','账号开户银行','销户网点','最后交易时间'
+]
+
+root = tk.Tk()
+root.title("数据库查询")
+root.geometry("800x400")
+
+ComBtnSource = []
+
+CombBtnResult = tk.StringVar()
+RadioBtnResult = tk.IntVar()
+CombBtnConfirm = ''
+TextLabelShow = tk.StringVar()
+
+def RadioChoose():
+    global RadioBtnConfirm
+    RadioBtnConfirm = RadioBtnResult.get()
+
+
+def CombChoose():
+    global CombBtnConfirm
+    CombBtnConfirm = CombBtnResult.get()
+
+
+def ComboChange():
+    if RadioBtnConfirm==1:
+        Comb['values'] = people_data
+    elif RadioBtnConfirm==2:
+        Comb['values'] = account_data
+    else:
+        Comb['values'] = business_data
+
+def RadioBtnConvert(m):
+    n=''
+    if m==1:
+        n = '人员信息表'
+    elif m==2:
+        n = '账户信息表'
+    else:
+        n = '交易明细表'
+    return n
+
+
+def find_btn_clicked():
+    source = RadioBtnConvert(RadioBtnConfirm)
+    data = CombBtnConfirm
+    cell = str(CellText.get("1.0", "end-1c"))
+    sql_input = 'select * from' + ' ' + '`' + source + '`' + ' ' + 'where' + ' ' + '`' + data + '`' + ' ' + '=' + ' ' + '\'' + cell + '\''
+    python_connect_mysql(sql_input)
+
+
+
+
+SourceLabel = tk.Label(root, text="请输入要查询的表格:")
+SourceLabel.grid(row=0, column=0,padx=1, pady=1)
+RadioBtn1 = tk.Radiobutton(root, text="人员信息表",variable=RadioBtnResult, value=1, command=RadioChoose)
+RadioBtn1.grid(row=0, column=1, rowspan=1)
+RadioBtn2 = tk.Radiobutton(root, text="账户信息表",variable=RadioBtnResult, value=2, command=RadioChoose)
+RadioBtn2.grid(row=0, column=2, rowspan=1)
+RadioBtn3 = tk.Radiobutton(root, text="交易明细表",variable=RadioBtnResult, value=3, command=RadioChoose)
+RadioBtn3.grid(row=0, column=3, rowspan=1)
+
+DataLabel = tk.Label(root, text="请选择表中的字段:")
+DataLabel.grid(row=1, column=0, rowspan=1)
+Comb = ttk.Combobox(root, postcommand=ComboChange,textvariable=CombBtnResult)
+Comb.grid(row=1, column=1, rowspan=1)
+CombComfirmBtn = tk.Button(root, text="确定", command=CombChoose)
+CombComfirmBtn.grid(row=1, column=2)
+TextLabel = tk.Label(root, text="")
+TextLabel.grid(row=2, column=0, rowspan=1)
+
+TextLabel = tk.Label(root, text="请输入要查询的内容:")
+TextLabel.grid(row=3, column=0, rowspan=1)
+CellText = tk.Text(root, height=1.5, width=20, wrap="word", state="normal")
+CellText.grid(row=3, column=1)
+find_btn = tk.Button(root, text="先点确定再点查询", command=find_btn_clicked)
+find_btn.grid(row=4, column=0)
+root.mainloop()
+
+
+
+
+
+

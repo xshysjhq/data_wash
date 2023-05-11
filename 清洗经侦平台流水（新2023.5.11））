@@ -1,12 +1,27 @@
-
 import os
 import pandas as pd
 import shutil
 import numpy as np
-from tkinter import messagebox,filedialog
-import tkinter as tk
+from tkinter import messagebox, filedialog
+from tkinter import Tk
 
-#生成文件夹
+root = Tk()
+root.withdraw()
+
+# 弹出输入对话框
+messagebox.showinfo("经侦平台数据清洗", "点确定选择要清洗的文件夹")
+
+# 定义桌面和源文件夹
+desktop_path = os.path.expanduser('~/Desktop')
+path_output = desktop_path
+folder_path = filedialog.askdirectory()
+path_folder=os.path.basename(folder_path)
+if not folder_path:
+    messagebox.showerror("经侦平台数据清洗", "未选择文件夹")
+    exit()
+
+
+# 创建汇总文件的目录
 def mkdir(input_path,input_str):
     path_join_result=input_path + "\\" + input_str
     isExists = os.path.exists(path_join_result)
@@ -17,138 +32,108 @@ def mkdir(input_path,input_str):
     return path_join_result
 
 
-def addcsv(path_origin,path_goal,use_keyword,not_use_keyword):
+# 定义表格名称关键字
+business_keyword = '交易明细信息'
+people_keyword = '人员信息'
+account_keyword = '账户信息'
+not_use_keyword = '子账户'
+path_source = folder_path
+# 创建文件目录
+desktop_path = os.path.expanduser('~/Desktop')
+path_output = desktop_path
+business_path = mkdir(path_output, business_keyword)
+people_path = mkdir(path_output, people_keyword)
+account_path = mkdir(path_output, account_keyword)
+
+
+def addcsv(path_origin, path_goal, keyword, keyword2):
     df = []
-    df2= []
+    df2 = []
     df_concat = []
 
     file_list = os.listdir(path_origin)
     for i in file_list:
-        if use_keyword in i:
-            if not not_use_keyword in i:
-              df = pd.read_csv(path_origin + '\\' + i, encoding='gb18030', dtype=object)
-              df.to_csv(path_goal + '\\' + i , index=None)
+        if keyword in i:
+            if not keyword2 in i:
+                df = pd.read_csv(path_origin + '\\' + i, encoding='gb18030', dtype=object)
+                df.to_excel(path_goal + '\\' + i + '.xlsx', index=None)
 
     filenames = os.listdir(path_goal)
     index = 0
     for name in filenames:
-        df2.append(pd.read_csv(os.path.join(path_goal, name), dtype=object))
+        df2.append(pd.read_excel(os.path.join(path_goal, name), dtype=object))
         index = +1
     df_concat = pd.concat(df2)
-    df_concat.to_csv(path_goal + '\\' + use_keyword + '汇总.csv', index=None)
+    df_concat.to_excel(path_goal + '\\' + keyword + '汇总.xlsx', index=None)
 
 
+addcsv(path_source, business_path, business_keyword, not_use_keyword)
+addcsv(path_source, people_path, people_keyword, not_use_keyword)
+addcsv(path_source, account_path, account_keyword, not_use_keyword)
+
+df_business = pd.read_excel(business_path + '\\' + business_keyword + '汇总.xlsx', dtype=object)  # 读取交易流水
+df_account = pd.read_excel(account_path + '\\' + account_keyword + '汇总.xlsx', dtype=object)  # 读取账户信息
+df_people = pd.read_excel(people_path + '\\' + people_keyword + '汇总.xlsx', dtype=object)
+
+df_account.rename(str.strip, axis='columns', inplace=True)
+df_business.rename(str.strip, axis='columns', inplace=True)
+df_people.rename(str.strip, axis='columns', inplace=True)
 
 
-# 删除字符串前后的空格
-
+# 定义一个函数，用于删除字符串前后的空格
 def strip_whitespace(x):
     if isinstance(x, str):
-        return x.replace("	", "")
+        return x.strip()
     else:
         return x
 
-#删除生成的文件
+
+# 将 DataFrame 中的每个单元格应用 strip_whitespace 函数
+
+df_business = df_business.applymap(strip_whitespace)
+df_account = df_account.applymap(strip_whitespace)
+df_people = df_people.applymap(strip_whitespace)
+
+# 删除空行
+df_business.drop("查询反馈结果原因", axis=1, inplace=True)
+df_business.replace('', np.nan, inplace=True)
+df_business = df_business.dropna(how='all')
+df_account = df_account.dropna(how='all')
+df_business['交易账号'].fillna(df_business['交易卡号'], inplace=True)
+
+df_account_split = df_account.copy()
+# 删除某一列中字符串的 _ 之后的部分
+df_account_split['交易账号'] = df_account_split['交易账号'].str.split('_').str[0]
+df_compare = pd.merge(left=df_business, right=df_account_split, how='left', on='交易卡号')
+df_compare['交易方户名'] = df_compare['账户开户名称']
+df_compare['交易方证件号码'] = df_compare['开户人证件号码']
+df_compare.insert(0, '开户银行', df_compare['账号开户银行'])
+df_compare_minus = df_compare.iloc[:, 0:29]
+df_compare_minus.rename(columns={'交易账号_x': '交易账号', '备注_x': '备注'}, inplace=True)
+
+df_compare_minus_null = df_compare_minus[df_compare_minus['交易方户名'].isnull()]
+df_compare_minus_notnull = df_compare_minus[df_compare_minus['交易方户名'].notnull()]
+df_mid = pd.merge(left=df_compare_minus_null, right=df_account_split, how='left', on='交易账号')
+df_mid['交易方户名'] = df_mid['账户开户名称']
+df_mid['交易方证件号码'] = df_mid['开户人证件号码']
+df_mid['开户银行'] = df_mid['账号开户银行']
+df_mid_minus = df_mid.iloc[:, 0:29]
+df_mid_minus.rename(columns={'交易卡号_x': '交易卡号', '备注_x': '备注'}, inplace=True)
+df_end = pd.concat([df_mid_minus, df_compare_minus_notnull])
+df_end_drop1 = df_end.drop_duplicates()
+df_end_drop2 = df_end_drop1[~(df_end_drop1['交易金额'].isin(['0.00']))]
+df_end_drop2 = df_end_drop2.dropna(subset=['交易时间'])
+df_end_drop2.to_excel(desktop_path + '\\' + path_folder + '-交易流水.xlsx', index=None)
+df_account_split.to_excel(desktop_path + '\\' + path_folder + '-账户信息.xlsx', index=None)
+df_people.to_excel(desktop_path+ '\\' +path_folder+'-人员信息.xlsx',index=None)
+
 def rmtr(folder_path):
     if os.path.exists(folder_path) and os.path.isdir(folder_path):
         shutil.rmtree(folder_path)
 
-    # 将 DataFrame 中的每个单元格应用 strip_whitespace 函数
 
+rmtr(business_path)
+rmtr(people_path)
+rmtr(account_path)
 
-
-if __name__ == '__main__':
-    #选择需要清洗的文件夹
-    root = tk.Tk()
-    root.withdraw()
-    root.title("经侦平台数据清洗")
-    root.geometry("300x200")
-    messagebox.showinfo("经侦平台数据清洗", "点确定选择要清洗的文件夹")
-    #未选择则报错
-    folder_path = filedialog.askdirectory()
-    if not folder_path:
-        messagebox.showerror("经侦平台数据清洗", "未选择文件夹")
-        exit()
-    # 定义表格名称关键字
-    business_keyword = '交易明细信息'
-    people_keyword = '人员信息'
-    account_keyword = '账户信息'
-    not_use_keyword = '子账户'
-    path_source = folder_path
-    #创建文件目录
-    desktop_path = os.path.expanduser('~/Desktop')
-    path_output = desktop_path
-    business_path = mkdir(path_output,business_keyword)
-    people_path = mkdir(path_output,people_keyword)
-    account_path = mkdir(path_output,account_keyword)
-
-    #分表
-    addcsv(path_source,business_path,business_keyword,not_use_keyword)
-    addcsv(path_source,people_path,people_keyword,not_use_keyword)
-    addcsv(path_source,account_path,account_keyword,not_use_keyword)
-
-    #读取汇总表
-    df_business = pd.read_csv(business_path + '\\' + business_keyword + '汇总.csv', dtype=object)  # 读取交易流水
-    df_account = pd.read_csv(account_path + '\\' + account_keyword + '汇总.csv', dtype=object)  # 读取账户信息
-    df_people = pd.read_csv(people_path + '\\' + people_keyword + '汇总.csv', dtype=object)
-    # 删除前后字符串
-    df_account.rename(str.strip, axis='columns', inplace=True)
-    df_business.rename(str.strip, axis='columns', inplace=True)
-    df_people.rename(str.strip, axis='columns', inplace=True)
-
-    df_business = df_business.applymap(strip_whitespace)
-    df_account = df_account.applymap(strip_whitespace)
-    df_people= df_people.applymap(strip_whitespace)
-
-    # 删除空行
-    df_business.drop("查询反馈结果原因", axis=1, inplace=True)
-    df_business.replace('', np.nan, inplace=True)
-    df_business = df_business.dropna(how='all')
-    df_account = df_account.dropna(how='all')
-    df_business['交易账号'].fillna(df_business['交易卡号'], inplace=True)
-
-    #创建表格副本
-    df_account_split= df_account.copy()
-
-    # 删除某一列中字符串的 _ 之后的部分
-    df_account_split['交易账号'] = df_account_split['交易账号'].str.split('_').str[0]
-
-    #比对卡号，补全户名和证件号
-    df_compare=pd.merge(left=df_business,right=df_account_split,how='left',on='交易卡号')
-    df_compare['交易方户名']=df_compare['账户开户名称']
-    df_compare['交易方证件号码']=df_compare['开户人证件号码']
-    df_compare.insert(0,'开户银行',df_compare['账号开户银行'])
-    df_compare_minus=df_compare.iloc[:,0:29]
-    df_compare_minus.rename(columns={'交易账号_x':'交易账号','备注_x':'备注'},inplace=True)
-
-    #比对账号，补全户名和证件号
-    df_compare_minus_null=df_compare_minus[df_compare_minus['交易方户名'].isnull()]
-    df_compare_minus_notnull=df_compare_minus[df_compare_minus['交易方户名'].notnull()]
-    df_mid = pd.merge(left=df_compare_minus_null, right=df_account_split, how='left', on='交易账号')
-    df_mid['交易方户名']=df_mid['账户开户名称']
-    df_mid['交易方证件号码']=df_mid['开户人证件号码']
-    df_mid['开户银行']=df_mid['账号开户银行']
-    df_mid_minus=df_mid.iloc[:,0:29]
-    df_mid_minus.rename(columns={'交易卡号_x':'交易卡号','备注_x':'备注'},inplace=True)
-
-    #合并去重
-    df_end=pd.concat([df_mid_minus,df_compare_minus_notnull])
-    df_end_drop1=df_end.drop_duplicates()
-
-    #去交易金额0.00的记录
-    df_end_drop2=df_end_drop1[~(df_end_drop1['交易金额'].isin(['0.00']))]
-
-    #去空行
-    df_end_drop2 = df_end_drop2.dropna(subset=['交易时间'])
-
-    #导出
-    desktop_path = os.path.expanduser('~/Desktop')
-    path_folder=os.path.basename(path_source)
-    df_end_drop2.to_csv(desktop_path+ '\\' +path_folder+'清洗后的交易流水.csv',index=None)
-    df_account_split.to_csv(desktop_path+ '\\' +path_folder+'清洗后的账户信息.csv',index=None)
-    df_people.to_csv(desktop_path+ '\\' +path_folder+'清洗后的人员信息.csv',index=None)
-
-    rmtr(business_path)
-    rmtr(people_path)
-    rmtr(account_path)
-    messagebox.showinfo("经侦平台数据清洗", "点确定选择要清洗的文件夹")
+messagebox.showinfo("经侦平台数据清洗", "已完成！")

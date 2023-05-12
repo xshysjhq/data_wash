@@ -1,0 +1,27 @@
+import pandas as pd
+import os
+import numpy as np
+df1=pd.read_excel(r'C:\Users\1\Desktop\工作簿1.xlsx',dtype=object)
+df2=pd.read_excel(r'C:\Users\1\Desktop\users(含银行卡、联系电话、上下级关系等）.xlsx',dtype=object)
+df3=pd.read_excel(r'C:\Users\1\Desktop\用户提存金额汇总表(第四次修正版).xlsx',dtype=object)
+
+
+namelist=list(set(df1['人员']))
+dir=r'C:\Users\1\Desktop\集群战役（代理）\第七批'
+
+def mkdir(dir):
+    isExists=os.path.exists(dir)
+    if not isExists:
+        os.makedirs(dir)
+        print(dir+'创建成功')
+        return True
+    else:
+        print(dir+'目录已存在')
+        return False
+for i in namelist:
+    path=dir+'\\'+i
+    mkdir(path)
+    df_i_1=df2.loc[df2['户名']==i]
+    df_i_2=df3.loc[df3['户名']==i]
+    df_i_1.to_excel(path+'\\'+'%s注册信息.xlsx'%i,index=None)
+    df_i_2.to_excel(path+'\\'+'%s充值提现.xlsx'%i,index=None)

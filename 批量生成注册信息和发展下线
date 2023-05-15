@@ -1,0 +1,103 @@
+import pandas as pd
+import os
+import tkinter as tk
+from tkinter import messagebox, filedialog
+
+# 选择赌客汇总表文件夹
+def open_file_a():
+    global user_file
+    user_file = filedialog.askopenfilename()
+    user_entry.insert("end", f"{user_file}")
+
+
+# 选择模板文件
+def open_file_b():
+    global template_file
+    template_file = filedialog.askopenfilename()
+    template_entry.insert(tk.END, f"{template_file}")
+
+# 选择要存放文件的位置
+def open_file_c():
+    global save_file_name
+    save_file_name = filedialog.askdirectory()
+    save_entry.insert(tk.END, f"{save_file_name}")
+
+
+
+
+# 主函数
+def process_files():
+    messagebox.showinfo("生成注册信息", "正在处理，程序可能会卡顿，不要着急哦...")
+    # df1是模板文件，df2是信息汇总表
+    df1 = pd.read_excel(template_file, dtype=object)
+    df2 = pd.read_excel(user_file, dtype=object)
+    namelist = list(set(df1['姓名']))
+    id_list=list(set(df1['ID']))
+    file_path = save_file_name
+
+    for i in id_list:
+        user_name=df1[df1['ID'] == i]['姓名'].values[0]
+        path = file_path + '\\' + user_name
+        #生成注册文件
+        os.makedirs(path)
+        df_i_1 = df2.loc[df2['ID'] == i]
+        df_i_1.to_excel(path + '\\' + user_name + '注册信息.xlsx', index=None)
+        writer = pd.ExcelWriter(path + '\\' + user_name + '发展下线.xlsx')
+        id_name_list = df_i_1['ID'].to_list()
+        # 循环三次生成下线文件
+        for t in id_name_list:
+            df_downline_1 = df2.loc[df2['上级id'] == t]
+            id_name_list2 = df_downline_1['ID'].to_list()
+            if len(df_downline_1['ID']) > 0:
+                df_downline_1.to_excel(writer, sheet_name='%s发展下线' % t, index=None)
+                for j in id_name_list2:
+                    df_downline_2 = df2.loc[df2['上级id'] == j]
+                    id_name_list3 = df_downline_2['ID'].to_list()
+                    if len(df_downline_2['ID']) > 0:
+                        df_downline_2.to_excel(writer, sheet_name='%s-%s发展下线' % (t, j), index=None)
+                        for m in id_name_list3:
+                            df_downline_3 = df2.loc[df2['上级id'] == m]
+                            if len(df_downline_3['ID']) > 0:
+                                df_downline_3.to_excel(writer, sheet_name='%s-%s-%s发展下线' % (t, j, m), index=None)
+            writer.book.create_sheet()
+            writer.close()
+    messagebox.showinfo("生成注册信息", "已完成")
+
+
+
+root = tk.Tk()
+root.title("生成注册信息")
+root.geometry("500x200")
+
+# 创建选择总表的label、button和entry
+user_label = tk.Label(root, text="请点按钮选择赌客信息总表:")
+user_label.grid(row=0, column=0)
+user_entry = tk.Entry(root)
+user_entry.grid(row=0, column=1)
+
+user_btn = tk.Button(root, text="选择", command=open_file_a)
+user_btn.grid(row=0, column=2)
+
+# 创建选择模板的label、button和entry
+template_label = tk.Label(root, text="请点按钮选择创建代理模板:")
+template_label.grid(row=1, column=0)
+template_entry = tk.Entry(root)
+template_entry.grid(row=1, column=1)
+
+template_btn = tk.Button(root, text="选择", command=open_file_b)
+template_btn.grid(row=1, column=2)
+
+# 创建存放文件的label、button和entry
+save_label = tk.Label(root, text="请点按钮选择要存放的文件夹:")
+save_label.grid(row=2, column=0)
+save_entry = tk.Entry(root)
+save_entry.grid(row=2, column=1)
+
+save_btn = tk.Button(root, text="选择", command=open_file_c)
+save_btn.grid(row=2, column=2)
+
+# 创建处理文件的按钮
+btn_process = tk.Button(root, text="确定", command=process_files)
+btn_process.grid(row=3, column=2)
+
+root.mainloop()
